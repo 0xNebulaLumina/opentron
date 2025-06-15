@@ -6,7 +6,7 @@ edition = "2018"
 
 [features]
 default = []
-static-rocksdb = ["rocks/static-link"]
+static-rocksdb = ["rocksdb/mt_static"]
 
 [dependencies]
 log = "0.4"
@@ -14,7 +14,7 @@ byteorder = "1.4"
 bytes = "1"
 prost = "0.8"
 num_cpus = "1"
-rocks = "0.1.10"
+rocksdb = "0.23"
 
 types = { path = "../types" }
 keys = { path = "../keys" }

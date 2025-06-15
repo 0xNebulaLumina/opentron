@@ -10,7 +10,10 @@ use bytes::BytesMut;
 use log::{error, info, warn};
 use prost::Message;
 use rand::Rng;
-use rocks::prelude::*;
+use rocksdb::{
+    ColumnFamily, ColumnFamilyDescriptor, DB, FlushOptions, IteratorMode, Options,
+    ReadOptions, WriteBatch, WriteOptions,
+};
 use types::H256;
 
 use chain::{BlockHeader, IndexedBlock, IndexedBlockHeader, IndexedTransaction, Transaction};
@@ -27,10 +30,6 @@ pub enum CheckResult {
 
 pub struct ChainDB {
     db: DB,
-    default: ColumnFamily,
-    block_header: ColumnFamily,
-    transaction: ColumnFamily,
-    transaction_block: ColumnFamily,
 }
 
 impl Drop for ChainDB {
@@ -43,86 +42,98 @@ impl ChainDB {
     pub fn new<P: AsRef<Path>>(db_path: P) -> ChainDB {
         create_dir_all(&db_path).expect("create db directory");
 
-        let db_options = DBOptions::default()
-            .create_if_missing(true)
-            .create_missing_column_families(true)
-            .increase_parallelism(num_cpus::get() as _)
-            .allow_mmap_reads(true) // for Cuckoo table
-            .max_open_files(1024);
+        let mut db_options = Options::default();
+        db_options.create_if_missing(true);
+        db_options.create_missing_column_families(true);
+        db_options.increase_parallelism(num_cpus::get() as i32);
+        db_options.set_max_open_files(1024);
 
         let column_families = vec![
             ColumnFamilyDescriptor::new(
-                DEFAULT_COLUMN_FAMILY_NAME,
-                ColumnFamilyOptions::default()
-                    .optimize_for_small_db()
-                    .optimize_for_point_lookup(32)
-                    .num_levels(2)
-                    .compression(CompressionType::NoCompression),
+                "default",
+                {
+                    let mut opts = Options::default();
+                    opts.set_num_levels(2);
+                    opts.set_compression_type(rocksdb::DBCompressionType::None);
+                    opts
+                }
             ),
             // block_hash => BlockHeader
             ColumnFamilyDescriptor::new(
                 "block-header",
-                ColumnFamilyOptions::default().max_write_buffer_number(6),
+                {
+                    let mut opts = Options::default();
+                    opts.set_max_write_buffer_number(6);
+                    opts
+                }
             ),
             // [block_hash, transaction_index: u64, transaction_hash] => Transaction
             ColumnFamilyDescriptor::new(
                 "transaction",
-                ColumnFamilyOptions::default()
-                    .prefix_extractor_fixed(32)
-                    .optimize_level_style_compaction(512 * 1024 * 1024)
-                    .max_write_buffer_number(6),
+                {
+                    let mut opts = Options::default();
+                    opts.set_prefix_extractor(rocksdb::SliceTransform::create_fixed_prefix(32));
+                    opts.set_max_write_buffer_number(6);
+                    opts
+                }
             ),
             // transaction_hash => [block_hash, transaction_index: u64]
             // Key and value lengths are fixed
             ColumnFamilyDescriptor::new(
                 "transaction-block",
-                ColumnFamilyOptions::default()
-                    .table_factory_cuckoo(CuckooTableOptions::default())
-                    // .optimize_level_style_compaction(512 * 1024 * 1024)
-                    // .optimize_for_point_lookup(32)
-                    .max_write_buffer_number(6),
+                {
+                    let mut opts = Options::default();
+                    opts.set_max_write_buffer_number(6);
+                    opts
+                }
             ),
         ];
 
-        let (db, mut handles) = DB::open_with_column_families(&db_options, db_path, column_families).unwrap();
-        let txn_blk = handles.pop().unwrap();
-        let txn = handles.pop().unwrap();
-        let blk = handles.pop().unwrap();
-        let default = handles.pop().unwrap();
+        let db = DB::open_cf_descriptors(&db_options, db_path, column_families).unwrap();
 
-        assert!(handles.is_empty());
+        ChainDB { db }
+    }
 
-        ChainDB {
-            db: db,
-            default: default,
-            block_header: blk,
-            transaction: txn,
-            transaction_block: txn_blk,
-        }
+    fn default_cf(&self) -> &ColumnFamily {
+        self.db.cf_handle("default").expect("default column family should exist")
+    }
+
+    fn block_header_cf(&self) -> &ColumnFamily {
+        self.db.cf_handle("block-header").expect("block-header column family should exist")
+    }
+
+    fn transaction_cf(&self) -> &ColumnFamily {
+        self.db.cf_handle("transaction").expect("transaction column family should exist")
+    }
+
+    fn transaction_block_cf(&self) -> &ColumnFamily {
+        self.db.cf_handle("transaction-block").expect("transaction-block column family should exist")
     }
 
     pub fn reset_node_id(&self) -> Vec<u8> {
         let mut rng = rand::thread_rng();
         let mut node_id = vec![b'A'; 64];
         rng.fill(&mut node_id[32..]);
-        self.default
-            .put(WriteOptions::default_instance(), b"NODE_ID", &node_id)
+        self.db
+            .put_cf(self.default_cf(), b"NODE_ID", &node_id)
             .unwrap();
         node_id
     }
 
     pub fn get_node_id(&self) -> Vec<u8> {
-        if let Ok(node_id) = self.default.get(ReadOptions::default_instance(), b"NODE_ID") {
-            node_id.to_vec()
+        if let Ok(Some(node_id)) = self.db.get_cf(self.default_cf(), b"NODE_ID") {
+            node_id
         } else {
             self.reset_node_id()
         }
     }
 
     pub fn get_block_height(&self) -> i64 {
-        self.default
-            .get(ReadOptions::default_instance(), b"BLOCK_HEIGHT")
-            .map(|val| BE::read_u64(&*val) as i64)
+        self.db
+            .get_cf(self.default_cf(), b"BLOCK_HEIGHT")
+            .ok()
+            .flatten()
+            .map(|val| BE::read_u64(&val) as i64)
             .unwrap_or(0)
     }
 
@@ -131,8 +142,8 @@ impl ChainDB {
         if height > self.get_block_height() {
             let mut val = [0u8; 8];
             BE::write_u64(&mut val, height as u64);
-            self.default
-                .put(WriteOptions::default_instance(), b"BLOCK_HEIGHT", &val)
+            self.db
+                .put_cf(self.default_cf(), b"BLOCK_HEIGHT", &val)
                 .unwrap();
         }
     }
@@ -140,8 +151,8 @@ impl ChainDB {
     pub fn force_update_block_height(&self, height: i64) -> Result<(), BoxError> {
         let mut val = [0u8; 8];
         BE::write_u64(&mut val, height as u64);
-        self.default
-            .put(WriteOptions::default_instance(), b"BLOCK_HEIGHT", &val)
+        self.db
+            .put_cf(self.default_cf(), b"BLOCK_HEIGHT", &val)
             .map_err(From::from)
     }
 
@@ -151,11 +162,11 @@ impl ChainDB {
     }
 
     pub fn insert_block(&self, block: &IndexedBlock) -> Result<(), Box<dyn Error>> {
-        let mut batch = WriteBatch::with_reserved_bytes(1024);
+        let mut batch = WriteBatch::default();
 
         let mut buf = BytesMut::with_capacity(block.header.raw.encoded_len());
         block.header.raw.encode(&mut buf)?;
-        batch.put_cf(&self.block_header, block.header.hash.as_bytes(), &buf);
+        batch.put_cf(self.block_header_cf(), block.header.hash.as_bytes(), &buf);
 
         for (index, txn) in block.transactions.iter().enumerate() {
             buf.clear();
@@ -165,28 +176,31 @@ impl ChainDB {
             let mut idx_key = [0u8; 8];
             BE::write_u64(&mut idx_key[..], index as u64);
 
-            batch.putv_cf(
-                &self.transaction,
-                &[block.hash().as_bytes(), &idx_key, txn.hash.as_bytes()],
-                &[&buf],
-            );
+            let mut composite_key = Vec::with_capacity(32 + 8 + 32);
+            composite_key.extend_from_slice(block.hash().as_bytes());
+            composite_key.extend_from_slice(&idx_key);
+            composite_key.extend_from_slice(txn.hash.as_bytes());
+
+            batch.put_cf(self.transaction_cf(), &composite_key, &buf);
+
             // reverse index
             // transaction_hash => [block_hash, transaction_index: u64]
-            batch.putv_cf(
-                &self.transaction_block,
-                &[txn.hash.as_bytes()],
-                &[block.hash().as_bytes(), &idx_key],
-            );
+            let mut reverse_value = Vec::with_capacity(32 + 8);
+            reverse_value.extend_from_slice(block.hash().as_bytes());
+            reverse_value.extend_from_slice(&idx_key);
+
+            batch.put_cf(self.transaction_block_cf(), txn.hash.as_bytes(), &reverse_value);
         }
 
-        self.db.write(WriteOptions::default_instance(), &batch)?;
+        self.db.write(batch)?;
         Ok(())
     }
 
     pub fn has_block_id(&self, id: &H256) -> bool {
-        self.block_header
-            .get(ReadOptions::default_instance(), id.as_bytes())
-            .is_ok()
+        self.db
+            .get_cf(self.block_header_cf(), id.as_bytes())
+            .map(|opt| opt.is_some())
+            .unwrap_or(false)
     }
 
     pub fn has_block(&self, block: &IndexedBlock) -> bool {
@@ -199,12 +213,12 @@ impl ChainDB {
         let mut upper_bound = [0xffu8; 32];
         BE::write_u64(&mut upper_bound[..8], num);
 
-        let it = self.block_header.new_iterator(
-            &ReadOptions::default()
-                .iterate_lower_bound(&lower_bound[..])
-                .iterate_upper_bound(&upper_bound[..]),
+        let iter = self.db.iterator_cf(
+            self.block_header_cf(),
+            IteratorMode::From(&lower_bound, rocksdb::Direction::Forward)
         );
-        it.count() > 0
+
+        iter.take_while(|(key, _)| key.starts_with(&lower_bound[..8])).count() > 0
     }
 
     pub fn get_block_from_header(&self, header: IndexedBlockHeader) -> Result<IndexedBlock, BoxError> {

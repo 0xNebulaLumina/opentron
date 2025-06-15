@@ -8,7 +8,7 @@ version = "0.1.0"
 default = []
 
 javatron = []
-static-rocksdb = ["state/static-rocksdb"]
+static-rocksdb = ["state/static-rocksdb", "chain-db/static-rocksdb"]
 
 [dependencies]
 chrono = "0.4"
