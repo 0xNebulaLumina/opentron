@@ -1,5 +1,5 @@
 pub fn ecadd(input: &[u8]) -> Option<Vec<u8>> {
-    use bn::{AffineG1, Fq, Group, G1};
+    use substrate_bn::{AffineG1, Fq, Group, G1};
 
     let words: Vec<_> = input.chunks(32).collect();
 
@@ -31,7 +31,7 @@ pub fn ecadd(input: &[u8]) -> Option<Vec<u8>> {
 }
 
 pub fn ecmul(input: &[u8]) -> Option<Vec<u8>> {
-    use bn::{AffineG1, Fq, Fr, Group, G1};
+    use substrate_bn::{AffineG1, Fq, Fr, Group, G1};
 
     let words: Vec<_> = input.chunks(32).collect();
 
@@ -57,7 +57,7 @@ pub fn ecmul(input: &[u8]) -> Option<Vec<u8>> {
 }
 
 pub fn ecpairing(input: &[u8]) -> Option<Vec<u8>> {
-    use bn::{pairing, AffineG1, AffineG2, Fq, Fq2, Group, Gt, G1, G2};
+    use substrate_bn::{pairing, AffineG1, AffineG2, Fq, Fq2, Group, Gt, G1, G2};
     use types::U256;
 
     const PAIR_SIZE: usize = 192;
