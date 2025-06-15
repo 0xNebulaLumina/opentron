@@ -1,0 +1,62 @@
+# Scratchpad
+
+## Current Task: RocksDB Compilation Issues Analysis and Resolution
+
+### Task Overview
+User is experiencing compilation issues with RocksDB dependency in Rust project. Need to:
+1. Analyze current RocksDB usage in codebase
+2. Identify specific compilation errors
+3. Recommend solution: update RocksDB or switch to alternative
+4. Provide migration steps if needed
+
+### Analysis Plan
+[X] Check all Cargo.toml files for RocksDB dependencies
+[X] Identify which modules use RocksDB
+[X] Analyze RocksDB API usage patterns
+[X] Try to reproduce compilation errors
+[X] Research compatible alternatives (sled, redb, etc.)
+[ ] Recommend best solution with migration plan
+[ ] Implement chosen solution
+
+### Findings
+- Project is a workspace with multiple crates
+- Main crates: opentron, cli
+- **RocksDB Issue Identified**: Using `rocks = "0.1.10"` crate which is very old (2021)
+- **Root Cause**: C++17 features required by newer RocksDB system library but rocks-sys uses C++14
+- **Affected Crates**: chain-db, state (both use rocks = "0.1.10")
+- **API Usage**: Standard KV operations (get, put, delete, iterators, column families, write batches)
+- **System RocksDB**: Appears to be newer version requiring C++17 features (std::variant, std::string_view, etc.)
+
+### Compilation Error Analysis
+- rocks-sys v0.1.10 fails to compile against newer RocksDB system library
+- C++ compilation errors due to C++17 features not available in C++14 mode
+- Errors include: std::variant, std::string_view, std::optional, std::make_from_tuple
+
+### RocksDB API Usage Analysis
+**Chain-DB Module:**
+- Column families: default, block-header, transaction, transaction-block
+- Operations: get, put, delete, write batches, iterators with bounds
+- Advanced features: prefix extractors, cuckoo tables, compression settings
+- Complex key structures: composite keys with block hashes and indices
+
+**State-DB Module:**
+- 17 column families for different data types (accounts, contracts, etc.)
+- Overlay write batches for transaction-like behavior
+- Prefix-based iteration and deletion
+- Point lookups with optimization settings
+
+### Alternative Database Options Research
+1. **rust-rocksdb** (official): Latest v0.24+ supports newer RocksDB, but may have breaking changes
+2. **redb**: Pure Rust, ACID, typed API, actively maintained, v2.3.0 available
+3. **sled**: Pure Rust but development stalled, not recommended for new projects
+4. **heed/lmdb**: LMDB bindings, good performance but different API paradigm
+
+### Recommendation: Update to rust-rocksdb
+**Reasons:**
+- Minimal code changes required (similar API)
+- Maintains performance characteristics
+- Active maintenance and C++17 compatibility
+- Supports all current features (column families, iterators, etc.)
+
+### Lessons
+(None yet)
