@@ -24,6 +24,7 @@ use slog_scope_futures::FutureExt as SlogFutureExt;
 use tokio::net::{TcpListener, TcpStream};
 use tokio::sync::broadcast;
 use tokio::sync::mpsc;
+use tokio::task::spawn;
 use tokio::time::Duration;
 use tokio::time::{sleep, timeout};
 use tokio_stream::StreamExt;
@@ -82,7 +83,7 @@ async fn passive_channel_service(
                         let logger = slog_scope::logger().new(o!(
                             "peer_addr" => peer_addr,
                         ));
-                        tokio::spawn(async move {
+                        spawn(async move {
                             let _ = handshake_handler(ctx.clone(), sock).with_logger(logger).await;
                             ctx.num_passive_connections.fetch_sub(1, Ordering::SeqCst);
                         });
@@ -113,7 +114,7 @@ async fn active_channel_service(ctx: Arc<AppContext>) -> Result<(), Box<dyn Erro
     let active_service = {
         let ctx = ctx.clone();
         let active_nodes = ctx.config.protocol.channel.active_nodes.clone();
-        tokio::spawn(async move {
+        spawn(async move {
             for peer_addr in active_nodes.into_iter().cycle() {
                 while ctx.num_active_connections.load(Ordering::SeqCst) >= max_active_connections {
                     sleep(Duration::from_secs(2)).await;
@@ -131,13 +132,14 @@ async fn active_channel_service(ctx: Arc<AppContext>) -> Result<(), Box<dyn Erro
                 let logger = slog_scope::logger().new(o!(
                     "peer_addr" => peer_addr.clone(),
                 ));
-                match timeout(Duration::from_secs(10), TcpStream::connect(&peer_addr)).await {
-                    Err(_) => slog_warn!(logger, "connect timeout"),
+                // Increase connection timeout from 10s to 30s for better network compatibility
+                match timeout(Duration::from_secs(30), TcpStream::connect(&peer_addr)).await {
+                    Err(_) => slog_warn!(logger, "connect timeout after 30s"),
                     Ok(Err(e)) => slog_warn!(logger, "connect failed: {}", e),
                     Ok(Ok(sock)) => {
                         ctx.num_active_connections.fetch_add(1, Ordering::SeqCst);
                         let ctx = ctx.clone();
-                        tokio::spawn(async move {
+                        spawn(async move {
                             let _ = handshake_handler(ctx.clone(), sock).with_logger(logger).await;
                             ctx.num_active_connections.fetch_sub(1, Ordering::SeqCst);
                         });
@@ -207,7 +209,8 @@ async fn handshake_handler(ctx: Arc<AppContext>, mut sock: TcpStream) -> Result<
 
     writer.send(hello.into()).await?;
 
-    while let Ok(payload) = timeout(Duration::from_secs(10), reader.next()).await {
+    // Increase handshake timeout from 10s to 30s for better network compatibility
+    while let Ok(payload) = timeout(Duration::from_secs(30), reader.next()).await {
         if payload.is_none() {
             warn!("empty payload");
             break;

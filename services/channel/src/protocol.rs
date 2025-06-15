@@ -166,14 +166,20 @@ impl TryFrom<&[u8]> for ChannelMessage {
 
     fn try_from(buf: &[u8]) -> Result<Self, Self::Error> {
         if buf.is_empty() {
-            return Err(io::Error::new(io::ErrorKind::InvalidData, "invalid data"));
+            return Err(io::Error::new(io::ErrorKind::InvalidData, "empty message buffer"));
         }
 
         match buf[0] {
-            0x02 => Ok(ChannelMessage::Block(Message::decode(&buf[1..])?)),
-            0x03 => Ok(ChannelMessage::Transactions(Message::decode(&buf[1..])?)),
+            0x02 => Ok(ChannelMessage::Block(Message::decode(&buf[1..]).map_err(|e| {
+                io::Error::new(io::ErrorKind::InvalidData, format!("failed to decode Block message: {}", e))
+            })?)),
+            0x03 => Ok(ChannelMessage::Transactions(Message::decode(&buf[1..]).map_err(|e| {
+                io::Error::new(io::ErrorKind::InvalidData, format!("failed to decode Transactions message: {}", e))
+            })?)),
             0x06 => {
-                let inv = Inventory::decode(&buf[1..])?;
+                let inv = Inventory::decode(&buf[1..]).map_err(|e| {
+                    io::Error::new(io::ErrorKind::InvalidData, format!("failed to decode Inventory message: {}", e))
+                })?;
                 if inv.r#type == InventoryType::Block as i32 {
                     Ok(ChannelMessage::BlockInventory(inv))
                 } else {
@@ -181,27 +187,67 @@ impl TryFrom<&[u8]> for ChannelMessage {
                 }
             }
             0x07 => {
-                let inv = Inventory::decode(&buf[1..])?;
+                let inv = Inventory::decode(&buf[1..]).map_err(|e| {
+                    io::Error::new(io::ErrorKind::InvalidData, format!("failed to decode FetchInventory message: {}", e))
+                })?;
                 if inv.r#type == InventoryType::Block as i32 {
                     Ok(ChannelMessage::FetchBlockInventory(inv))
                 } else {
                     Ok(ChannelMessage::FetchTransactionInventory(inv))
                 }
             }
-            0x08 => Ok(ChannelMessage::SyncBlockchain(Message::decode(&buf[1..])?)),
-            0x09 => Ok(ChannelMessage::BlockchainInventory(Message::decode(&buf[1..])?)),
+            0x08 => Ok(ChannelMessage::SyncBlockchain(Message::decode(&buf[1..]).map_err(|e| {
+                io::Error::new(io::ErrorKind::InvalidData, format!("failed to decode SyncBlockchain message: {}", e))
+            })?)),
+            0x09 => Ok(ChannelMessage::BlockchainInventory(Message::decode(&buf[1..]).map_err(|e| {
+                io::Error::new(io::ErrorKind::InvalidData, format!("failed to decode BlockchainInventory message: {}", e))
+            })?)),
 
-            0x20 => Ok(ChannelMessage::HandshakeHello(Message::decode(&buf[1..])?)),
-            0x21 => Ok(ChannelMessage::HandshakeDisconnect(Message::decode(&buf[1..])?)),
+            0x20 => Ok(ChannelMessage::HandshakeHello(Message::decode(&buf[1..]).map_err(|e| {
+                io::Error::new(io::ErrorKind::InvalidData, format!("failed to decode HandshakeHello message: {}", e))
+            })?)),
+            0x21 => Ok(ChannelMessage::HandshakeDisconnect(Message::decode(&buf[1..]).map_err(|e| {
+                io::Error::new(io::ErrorKind::InvalidData, format!("failed to decode HandshakeDisconnect message: {}", e))
+            })?)),
             0x22 => {
-                assert!(buf[1] == 0xC0);
+                // Ping message should have exactly 2 bytes: [0x22, 0xC0]
+                if buf.len() < 2 {
+                    return Err(io::Error::new(
+                        io::ErrorKind::InvalidData,
+                        format!("ping message too short: {} bytes, expected 2", buf.len())
+                    ));
+                }
+                if buf[1] != 0xC0 {
+                    return Err(io::Error::new(
+                        io::ErrorKind::InvalidData,
+                        format!("invalid ping message format: expected [0x22, 0xC0], got [0x22, 0x{:02x}]", buf[1])
+                    ));
+                }
                 Ok(ChannelMessage::Ping)
             }
             0x23 => {
-                assert!(buf[1] == 0xC0);
+                // Pong message should have exactly 2 bytes: [0x23, 0xC0]
+                if buf.len() < 2 {
+                    return Err(io::Error::new(
+                        io::ErrorKind::InvalidData,
+                        format!("pong message too short: {} bytes, expected 2", buf.len())
+                    ));
+                }
+                if buf[1] != 0xC0 {
+                    return Err(io::Error::new(
+                        io::ErrorKind::InvalidData,
+                        format!("invalid pong message format: expected [0x23, 0xC0], got [0x23, 0x{:02x}]", buf[1])
+                    ));
+                }
                 Ok(ChannelMessage::Pong)
             }
-            _ => Err(io::Error::new(io::ErrorKind::InvalidData, "invalid data")),
+            _ => {
+                let preview_len = std::cmp::min(16, buf.len());
+                Err(io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    format!("unknown message type: 0x{:02x}, data preview: {}", buf[0], hex::encode(&buf[..preview_len]))
+                ))
+            }
         }
     }
 }
