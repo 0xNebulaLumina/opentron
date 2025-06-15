@@ -28,6 +28,13 @@ pub struct OverlayWriteBatch {
     // For now, we'll disable caching to get the basic functionality working
 }
 
+// SAFETY: WriteBatch is safe to send between threads in our use case because:
+// 1. It's only used within controlled database operations
+// 2. The raw pointers are managed by rocksdb library
+// 3. We don't share mutable references across thread boundaries
+unsafe impl Send for OverlayWriteBatch {}
+unsafe impl Sync for OverlayWriteBatch {}
+
 impl std::ops::Deref for OverlayWriteBatch {
     type Target = WriteBatch;
     fn deref(&self) -> &Self::Target {
