@@ -1,5 +1,5 @@
 #[rustfmt::skip]
-#[path = "proto.common.rs"]
+#[path = "protocol.rs"]
 mod common_inner;
 
 pub mod common {
@@ -28,7 +28,7 @@ pub mod common {
 }
 
 #[rustfmt::skip]
-#[path = "proto.chain.rs"]
+#[path = "protocol.rs"]
 mod chain_inner;
 
 pub mod chain {
@@ -74,11 +74,11 @@ pub mod chain {
 }
 
 #[rustfmt::skip]
-#[path = "proto.discovery.rs"]
+#[path = "protocol.rs"]
 pub mod discovery;
 
 #[rustfmt::skip]
-#[path = "proto.channel.rs"]
+#[path = "protocol.rs"]
 mod channel_inner;
 
 pub mod channel {
@@ -93,13 +93,13 @@ pub mod channel {
 }
 
 #[rustfmt::skip]
-#[path = "proto.contract.rs"]
+#[path = "protocol.rs"]
 pub mod contract;
 mod contract_ext;
 pub use contract_ext::ContractExt;
 
 #[rustfmt::skip]
-#[path = "proto.state.rs"]
+#[path = "protocol.rs"]
 mod state_inner;
 
 pub mod state {
