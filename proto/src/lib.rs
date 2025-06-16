@@ -114,7 +114,7 @@ pub mod state {
         pub fn new(block_timestamp: i64) -> Self {
             Account {
                 create_time: block_timestamp,
-                resource: Some(Default::default()),
+                account_resource: Some(Default::default()),
                 ..Default::default()
             }
         }
@@ -148,20 +148,20 @@ pub mod state {
             Err(())
         }
 
-        pub fn adjust_token_balance(&mut self, token_id: i64, diff: i64) -> Result<(), ()> {
-            if let Some(balance) = self.token_balance.get_mut(&token_id) {
-                if let Some(new_balance) = balance.checked_add(diff) {
-                    if new_balance >= 0 {
-                        *balance = new_balance;
-                        return Ok(());
-                    }
-                }
-            } else if diff >= 0 {
-                self.token_balance.insert(token_id, diff);
-                return Ok(());
-            }
-            Err(())
-        }
+        // pub fn adjust_token_balance(&mut self, token_id: i64, diff: i64) -> Result<(), ()> {
+        //     if let Some(balance) = self.token_balance.get_mut(&token_id) {
+        //         if let Some(new_balance) = balance.checked_add(diff) {
+        //             if new_balance >= 0 {
+        //                 *balance = new_balance;
+        //                 return Ok(());
+        //             }
+        //         }
+        //     } else if diff >= 0 {
+        //         self.token_balance.insert(token_id, diff);
+        //         return Ok(());
+        //     }
+        //     Err(())
+        // }
 
         // pub fn tron_power(&self) -> i64 {
         //     (self.frozen_amount_for_bandwidth + self.frozen_amount_for_energy + self.delegated_out_amount) / 1_000_000
