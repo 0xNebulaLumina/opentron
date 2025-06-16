@@ -68,11 +68,11 @@ impl IndexedBlock {
                 .collect::<Option<Vec<_>>>()?
         };
         let mut block_header = block_header?;
-        if block_header.raw_data.as_ref()?.merkle_root_hash.is_empty() {
+        if block_header.raw_data.as_ref()?.tx_trie_root.is_empty() {
             block_header
                 .raw_data
                 .as_mut()
-                .map(|raw| raw.merkle_root_hash = merkle_root(&transactions).as_bytes().to_owned());
+                .map(|raw| raw.tx_trie_root = merkle_root(&transactions).as_bytes().to_owned());
         }
         IndexedBlockHeader::from_raw(block_header).map(|header| Self::new(header, transactions))
     }
@@ -138,7 +138,7 @@ impl IndexedBlock {
     }
 
     pub fn merkle_root_hash(&self) -> &[u8] {
-        &self.header.raw.raw_data.as_ref().unwrap().merkle_root_hash
+        &self.header.raw.raw_data.as_ref().unwrap().tx_trie_root
     }
 
     pub fn verify_merkle_root_hash(&self) -> bool {

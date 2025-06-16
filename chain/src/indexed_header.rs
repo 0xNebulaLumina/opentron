@@ -56,7 +56,7 @@ impl IndexedBlockHeader {
     }
 
     pub fn merkle_root_hash(&self) -> &[u8] {
-        &self.raw.raw_data.as_ref().unwrap().merkle_root_hash
+        &self.raw.raw_data.as_ref().unwrap().tx_trie_root
     }
 
     pub fn witness(&self) -> &[u8] {

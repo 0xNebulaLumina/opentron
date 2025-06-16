@@ -35,18 +35,20 @@ impl IndexedTransaction {
 
     /// Recover owner address.
     pub fn recover_owner(&self) -> Result<Vec<Address>, keys::Error> {
-        let mut buf = Vec::with_capacity(255);
-        self.raw.raw_data.as_ref().unwrap().encode(&mut buf).unwrap();
+        todo!()
 
-        self.raw
-            .signatures
-            .iter()
-            .map(|raw_sig| {
-                Signature::try_from(raw_sig)
-                    .and_then(|sig| Public::recover(&buf, &sig))
-                    .map(|pk| Address::from_public(&pk))
-            })
-            .collect()
+        // let mut buf = Vec::with_capacity(255);
+        // self.raw.raw_data.as_ref().unwrap().encode(&mut buf).unwrap();
+
+        // self.raw
+        //     .signatures
+        //     .iter()
+        //     .map(|raw_sig| {
+        //         Signature::try_from(raw_sig)
+        //             .and_then(|sig| Public::recover(&buf, &sig))
+        //             .map(|pk| Address::from_public(&pk))
+        //     })
+        //     .collect()
     }
 
     pub fn expiration(&self) -> i64 {
