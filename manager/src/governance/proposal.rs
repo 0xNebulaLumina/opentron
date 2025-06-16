@@ -37,8 +37,8 @@ impl ProposalController<'_> {
                 return Ok(());
             }
 
-            if proposal.is_cancelled() {
-                debug!("proposal #{} is cancelled", proposal_id);
+            if proposal.is_canceled() {
+                debug!("proposal #{} is canceled", proposal_id);
                 continue;
             }
 

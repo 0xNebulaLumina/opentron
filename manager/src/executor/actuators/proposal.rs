@@ -92,8 +92,8 @@ impl BuiltinContractExecutorExt for contract_pb::ProposalApproveContract {
             if manager.latest_block_timestamp() >= proposal.expiration_time {
                 return Err("proposal has expired".into());
             }
-            if proposal.state == ProposalState::Cancelled as i32 {
-                return Err("proposal is cancelled".into());
+            if proposal.state == ProposalState::Canceled as i32 {
+                return Err("proposal is canceled".into());
             }
             if !self.is_approval && !proposal.approver_addresses.contains(&self.owner_address.to_vec()) {
                 return Err("cannot disapprove without former approval".into());
@@ -145,10 +145,10 @@ impl BuiltinContractExecutorExt for contract_pb::ProposalDeleteContract {
                 proposal.proposal_id, owner_address
             ));
         }
-        // NOTE: Pending implies not-expired, not-cancelled
+        // NOTE: Pending implies not-expired, not-canceled
         if proposal.state != ProposalState::Pending as i32 {
             return Err(format!(
-                "proposal #{} is not in pending state(expired or cancelled)",
+                "proposal #{} is not in pending state(expired or canceled)",
                 proposal.proposal_id
             ));
         }
@@ -158,7 +158,7 @@ impl BuiltinContractExecutorExt for contract_pb::ProposalDeleteContract {
 
     fn execute(&self, manager: &mut Manager, _ctx: &mut TransactionContext) -> Result<TransactionResult, String> {
         let mut proposal = manager.state_db.must_get(&keys::Proposal(self.proposal_id));
-        proposal.state = ProposalState::Cancelled as _;
+        proposal.state = ProposalState::Canceled as _;
         manager
             .state_db
             .put_key(keys::Proposal(self.proposal_id), proposal)

@@ -13,7 +13,7 @@
 //! ```
 
 use crate::chain::transaction::Contract;
-use crate::chain::ContractType;
+use crate::common_inner::transaction::contract::ContractType;
 use prost::Message;
 use prost_types::Any;
 

@@ -174,14 +174,14 @@ pub mod state {
         }
 
         pub fn resource(&self) -> &AccountResource {
-            self.resource.as_ref().unwrap()
+            self.resource().as_ref().unwrap()
         }
 
         pub fn resource_mut(&mut self) -> &mut AccountResource {
-            if self.resource.is_none() {
-                self.resource = Some(Default::default());
+            if self.resource().is_none() {
+                self.resource() = Some(Default::default());
             }
-            self.resource.as_mut().unwrap()
+            self.resource().as_mut().unwrap()
         }
 
         pub fn delegated_amount_for_resource(&self, res: ResourceCode) -> i64 {
@@ -201,8 +201,8 @@ pub mod state {
             }
         }
 
-        pub fn is_cancelled(&self) -> bool {
-            if self.state == ProposalState::Cancelled as i32 {
+        pub fn is_canceled(&self) -> bool {
+            if self.state == ProposalState::Canceled as i32 {
                 true
             } else {
                 false
