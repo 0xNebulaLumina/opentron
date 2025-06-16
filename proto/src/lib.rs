@@ -4,6 +4,7 @@ mod common_inner;
 
 pub mod common {
     pub use crate::common_inner::*;
+    pub use crate::channel_inner::block_inventory::BlockId;
     use byteorder::{ByteOrder, BE};
 
     impl From<Vec<u8>> for BlockId {
@@ -104,6 +105,7 @@ mod state_inner;
 
 pub mod state {
     pub use crate::common::{AccountType, ResourceCode, SmartContract};
+    pub use crate::state_inner::account::AccountResource;
     pub use crate::state_inner::*;
 
     use self::proposal::State as ProposalState;
@@ -111,7 +113,7 @@ pub mod state {
     impl Account {
         pub fn new(block_timestamp: i64) -> Self {
             Account {
-                creation_time: block_timestamp,
+                create_time: block_timestamp,
                 resource: Some(Default::default()),
                 ..Default::default()
             }
@@ -119,7 +121,7 @@ pub mod state {
 
         pub fn new_contract_account(block_timestamp: i64) -> Self {
             Account {
-                creation_time: block_timestamp,
+                create_time: block_timestamp,
                 r#type: AccountType::Contract as i32,
                 ..Default::default()
             }
@@ -161,35 +163,35 @@ pub mod state {
             Err(())
         }
 
-        pub fn tron_power(&self) -> i64 {
-            (self.frozen_amount_for_bandwidth + self.frozen_amount_for_energy + self.delegated_out_amount) / 1_000_000
-        }
+        // pub fn tron_power(&self) -> i64 {
+        //     (self.frozen_amount_for_bandwidth + self.frozen_amount_for_energy + self.delegated_out_amount) / 1_000_000
+        // }
 
-        pub fn amount_for_bandwidth(&self) -> i64 {
-            self.frozen_amount_for_bandwidth + self.delegated_frozen_amount_for_bandwidth
-        }
+        // pub fn amount_for_bandwidth(&self) -> i64 {
+        //     self.frozen_amount_for_bandwidth + self.delegated_frozen_amount_for_bandwidth
+        // }
 
-        pub fn amount_for_energy(&self) -> i64 {
-            self.frozen_amount_for_energy + self.delegated_frozen_amount_for_energy
-        }
+        // pub fn amount_for_energy(&self) -> i64 {
+        //     self.frozen_amount_for_energy + self.delegated_frozen_amount_for_energy
+        // }
 
-        pub fn resource(&self) -> &AccountResource {
-            self.resource().as_ref().unwrap()
-        }
+        // pub fn resource(&self) -> &AccountResource {
+        //     self.resource.as_ref().unwrap()
+        // }
 
-        pub fn resource_mut(&mut self) -> &mut AccountResource {
-            if self.resource().is_none() {
-                self.resource() = Some(Default::default());
-            }
-            self.resource().as_mut().unwrap()
-        }
+        // pub fn resource_mut(&mut self) -> &mut AccountResource {
+        //     if self.resource.is_none() {
+        //         self.resource = Some(Default::default());
+        //     }
+        //     self.resource.as_mut().unwrap()
+        // }
 
-        pub fn delegated_amount_for_resource(&self, res: ResourceCode) -> i64 {
-            match res {
-                ResourceCode::Bandwidth => self.delegated_frozen_amount_for_bandwidth,
-                ResourceCode::Energy => self.delegated_frozen_amount_for_energy,
-            }
-        }
+        // pub fn delegated_amount_for_resource(&self, res: ResourceCode) -> i64 {
+        //     match res {
+        //         ResourceCode::Bandwidth => self.delegated_frozen_amount_for_bandwidth,
+        //         ResourceCode::Energy => self.delegated_frozen_amount_for_energy,
+        //     }
+        // }
     }
 
     impl Proposal {
@@ -214,31 +216,33 @@ pub mod state {
         pub fn new_inner() -> Self {
             SmartContract {
                 name: "CreatedByContract".into(),
-                consume_user_energy_percent: 100,
+                consume_user_resource_percent: 100,
                 origin_energy_limit: 0,
                 ..Default::default()
             }
         }
     }
 
-    impl ResourceDelegation {
+    impl DelegatedResource {
         #[inline]
         pub fn is_empty(&self) -> bool {
-            self.amount_for_energy == 0 && self.amount_for_bandwidth == 0
+            self.frozen_balance_for_energy == 0 && self.frozen_balance_for_bandwidth == 0
         }
 
         #[inline]
         pub fn amount_for_resource(&self, res: ResourceCode) -> i64 {
             match res {
-                ResourceCode::Bandwidth => self.amount_for_bandwidth,
-                ResourceCode::Energy => self.amount_for_energy,
+                ResourceCode::Bandwidth => self.frozen_balance_for_bandwidth,
+                ResourceCode::Energy => self.frozen_balance_for_energy,
+                ResourceCode::TronPower => todo!(),
             }
         }
         #[inline]
         pub fn expiration_timestamp_for_resource(&self, res: ResourceCode) -> i64 {
             match res {
-                ResourceCode::Bandwidth => self.expiration_timestamp_for_bandwidth,
-                ResourceCode::Energy => self.expiration_timestamp_for_energy,
+                ResourceCode::Bandwidth => self.expire_time_for_bandwidth,
+                ResourceCode::Energy => self.expire_time_for_energy,
+                ResourceCode::TronPower => todo!(),
             }
         }
 
@@ -246,13 +250,14 @@ pub mod state {
         pub fn reset_resource(&mut self, res: ResourceCode) {
             match res {
                 ResourceCode::Bandwidth => {
-                    self.amount_for_bandwidth = 0;
-                    self.expiration_timestamp_for_bandwidth = 0;
+                    self.frozen_balance_for_bandwidth = 0;
+                    self.expire_time_for_bandwidth = 0;
                 }
                 ResourceCode::Energy => {
-                    self.amount_for_energy = 0;
-                    self.expiration_timestamp_for_energy = 0;
-                }
+                    self.frozen_balance_for_energy = 0;
+                    self.expire_time_for_energy = 0;
+                },
+                ResourceCode::TronPower => todo!()
             }
         }
     }
